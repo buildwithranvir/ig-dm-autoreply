@@ -5,6 +5,7 @@
    it's the only open question, by just typing the answer. Starting with "save" also teaches the bot.
 3. The AI words your answer as a reply and DMs the person.
 """
+import logging
 import re
 import time
 
@@ -15,6 +16,8 @@ from app.owner import alerts
 from app.storage import history
 from app.storage.kv import kv
 
+log = logging.getLogger(__name__)
+
 QUESTION_TTL = 2 * DAY
 PERSON_WINDOW = 23 * HOUR  # the person can only be DMed within 24h of their last message
 LEARNED_KEY = "facts:learned"
@@ -22,9 +25,12 @@ OPEN_KEY = "q:open"
 MAX_LEARNED = 50
 
 ANSWER_RE = re.compile(r"^#?(\d+)\s+(.+)$", re.DOTALL)
+# Words that say nothing about *what* is being asked. Creator-account words ("last reel", "video")
+# are included because most questions mention them; two questions sharing only those aren't the same.
 FILLER_WORDS = set(
-    "i you u my your ur me do did does the a an is are was what which how where when who why "
-    "use used using have has got get can could for in on of to it this that bro".split()
+    "i you u my your ur me do did does the a an is are was were what which how where when who why "
+    "use used using have has got get can could for in on of to it its this that bro find from with "
+    "last latest recent new reel reels video videos post posts story stories content".split()
 )
 
 
@@ -49,14 +55,15 @@ async def record_message_from(igsid: str) -> None:
 
 
 def _key_words(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.lower())) - FILLER_WORDS
+    return set(re.findall(r"[a-z0-9]+", text.lower())) - FILLER_WORDS - {config.OWNER_NAME.lower()}
 
 
 def is_duplicate(question: str, pending: list[str]) -> bool:
-    """The AI rephrases questions, so compare their key words rather than the exact text."""
+    """The AI rephrases questions, so compare their key words rather than the exact text.
+    Two questions match when most of their key words are shared (Jaccard similarity)."""
     new = _key_words(question)
     for old in map(_key_words, pending):
-        if new and old and len(new & old) / min(len(new), len(old)) >= 0.6:
+        if new and old and len(new & old) / len(new | old) >= 0.6:
             return True
     return False
 
@@ -66,6 +73,7 @@ async def ask(igsid: str, who: str, question: str, message: str) -> None:
     message is what the person actually wrote, and is what you see in the alert."""
     pending = await pending_for(igsid)
     if is_duplicate(question, pending):
+        log.info("Not asking again, %r repeats a question still open for %s", question, igsid)
         return
     qid = str(await kv.incr("q:counter"))
     await kv.set_json(f"q:{qid}", {"igsid": igsid, "who": who, "question": question, "message": message},

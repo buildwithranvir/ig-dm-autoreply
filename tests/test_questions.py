@@ -122,6 +122,14 @@ def test_answered_question_is_closed(ig):
     assert ig.to(OWNER)[-1].endswith("ai reply to: thanks bot")
 
 
+def test_new_question_is_asked_while_another_is_open(ig):
+    run(bot.handle_event(dm(OWNER, "inbox")))
+    run(questions.ask("c7", "@c7", "What was the last reel project?", "what was the last reel project"))
+    run(questions.ask("c7", "@c7", "Where can I find the agent of the last reel?", "where's the agent from the reel"))
+    alerts_sent = [t for t in ig.to(OWNER) if "❓" in t]
+    assert len(alerts_sent) == 2 and "where's the agent from the reel" in alerts_sent[1]
+
+
 def test_number_without_live_question_is_normal_chat(ig):
     ig.profiles[OWNER] = {"username": "ranvir_1028", "is_user_follow_business": True}
     run(bot.handle_event(dm(OWNER, "5 bros walked in")))
@@ -146,6 +154,11 @@ def test_parse_answer(text, expected):
     ("What mic do you use?", ["What laptop do you use?"], False),
     ("Which tool did i use for the voiceover in my last reel?", ["What tool for the voiceover?"], True),
     ("What editing app do you use?", ["Which tool did you use for the voiceover?"], False),
+    # the reported bug: sharing only "last reel" doesn't make two questions the same
+    ("Where can I find the agent of the last reel?", ["What was the last reel project?"], False),
+    ("Where can I find the agent from your last reel?", ["Where can I find the agent of the last reel?"], True),
+    ("What is the link to your latest video?", ["Which mic is in your latest video?"], False),
+    ("Where is Ranvir located?", ["Where does Ranvir live?"], False),
 ])
 def test_duplicate_question_detection(question, pending, expected):
     assert questions.is_duplicate(question, pending) is expected

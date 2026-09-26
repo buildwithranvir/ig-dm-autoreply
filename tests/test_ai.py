@@ -91,3 +91,9 @@ def test_retry_after_parsing():
 
 def test_prompt_skips_unfilled_template_lines():
     assert "TODO" not in ai.system_prompt()
+
+
+def test_question_for_owner_wins_over_handoff(llm):
+    llm(ok('{"reply": "lemme check", "handoff": true, "ask_owner": "Where is the agent from the reel?"}'))
+    reply = decide("where can i find the agent of the last reel?")
+    assert reply.ask_owner and not reply.handoff

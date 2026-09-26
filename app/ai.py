@@ -51,8 +51,9 @@ def system_prompt(is_request: bool = False, learned: Sequence[dict] = (), pendin
     pending_block = ""
     if pending:
         quoted = "; ".join(f'"{q}"' for q in pending)
-        pending_block = (f"\nYou are still checking on these questions from this person: {quoted}. Don't answer "
-                         "them or ask about them again; if they follow up, say you're still checking.\n")
+        pending_block = (f"\nYou are still checking on these questions from this person: {quoted}. If they "
+                         "follow up on one of these, say you're still checking and leave ask_owner empty. "
+                         "A DIFFERENT question you can't answer still gets its own ask_owner.\n")
     request_block = ""
     if is_request:
         request_block = ("\nThis person is NOT a follower (message request). If the message is spam, a scam, "
@@ -100,6 +101,10 @@ RULES
 - Otherwise, if they ask something you can't answer from the facts (a personal fact, link, tool, resource),
   set ask_owner to that question, rewritten short and clear (e.g. "What laptop do you use?"), keep
   handoff=false, and make reply a short holding message like "good q, lemme check and get back to u".
+- You make tech/AI content, so words like "agent", "bot", "model" or "project" usually mean something you
+  built or showed in a reel (an AI agent, a code project), not a talent agent or a business deal. Questions
+  about your content (where to find a project, agent, tool, code, template or link from a reel) are NEVER a
+  handoff: answer from the facts or use ask_owner.
 {request_block}
 Respond with ONLY a JSON object: {{"reply": "...", "handoff": true|false, "reason": "short reason if handoff",
 "spam": true|false, "ask_owner": "question for yourself, or empty"}}"""
@@ -214,6 +219,9 @@ async def decide(history: list[dict], *, is_request: bool = False, learned: Sequ
         log.error("LLM call failed: %r", exc)
         return None
 
+    if reply.handoff and reply.ask_owner:
+        # A concrete question for you beats a vague handoff: you can answer it and the chat isn't paused.
+        reply.handoff = False
     if not reply.text and not reply.spam:
         reply.handoff = True
         reply.reason = reply.reason or "AI returned an empty reply"
