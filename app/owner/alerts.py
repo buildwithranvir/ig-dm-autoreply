@@ -1,0 +1,65 @@
+"""Alerts to your alert account, within Instagram's 24-hour messaging rule.
+
+The bot may only DM the alert account if it messaged in the last 24 hours. Inside that window
+alerts go out immediately; outside it they queue in Redis until the alert account sends any
+message ("inbox"), which reopens the window and delivers the queue.
+"""
+import logging
+import time
+
+from app import config
+from app.config import HOUR
+from app.instagram import messaging
+from app.instagram.api import MAX_TEXT
+from app.storage.kv import kv
+
+log = logging.getLogger(__name__)
+
+WINDOW_KEY = "owner:last_msg"
+QUEUE_KEY = "alerts:queue"
+WINDOW = 23 * HOUR  # stay safely inside the 24h limit
+
+
+async def mark_owner_active() -> None:
+    await kv.set(WINDOW_KEY, str(time.time()))
+
+
+async def _window_open() -> bool:
+    last = await kv.get(WINDOW_KEY)
+    return bool(last) and time.time() - float(last) < WINDOW
+
+
+async def notify(text: str) -> None:
+    if not config.OWNER_ALERT_IGSID:
+        return
+    if await _window_open() and await messaging.send(config.OWNER_ALERT_IGSID, text):
+        return
+    await kv.rpush(QUEUE_KEY, text)
+    log.info("Alert queued until the alert account messages again: %s", text)
+
+
+def pack(items: list[str]) -> list[str]:
+    """Combine alerts into as few messages as possible, each within the length limit."""
+    out, current = [], ""
+    for item in items:
+        item = item[:MAX_TEXT]
+        if current and len(current) + 2 + len(item) > MAX_TEXT:
+            out.append(current)
+            current = item
+        else:
+            current = f"{current}\n\n{item}" if current else item
+    return out + ([current] if current else [])
+
+
+async def deliver_queue() -> None:
+    """The alert account messaged: reopen the window and send everything queued."""
+    await mark_owner_active()
+    queued = await kv.pop_all(QUEUE_KEY)
+    if not queued:
+        await messaging.send(config.OWNER_ALERT_IGSID, "📭 No queued alerts. You'll get live alerts for the next 24h.")
+        return
+    header = f"📬 {len(queued)} alert(s) while you were away:"
+    for message in pack([header, *queued]):
+        if not await messaging.send(config.OWNER_ALERT_IGSID, message):
+            await kv.rpush(QUEUE_KEY, *queued)  # nothing is lost; the next "inbox" retries
+            return
