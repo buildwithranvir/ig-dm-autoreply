@@ -18,16 +18,16 @@ async def was_sent_by_bot(mid: str) -> bool:
     return bool(await kv.get(f"sent:{mid}"))
 
 
-async def send(recipient_id: str, text: str) -> bool:
+async def send(recipient_id: str, text: str) -> str | None:
+    """Send a DM. Returns the sent message's ID, or None if Instagram refused it."""
     resp = await api.send_text(recipient_id, text)
     if not resp.is_success:
         log.error("Send API error %s to %s: %s", resp.status_code, recipient_id, resp.text[:500])
-        return False
-    mid = resp.json().get("message_id")
-    if mid:
-        await kv.set(f"sent:{mid}", "1", ex=2 * DAY)
+        return None
+    mid = resp.json().get("message_id") or "unknown"
+    await kv.set(f"sent:{mid}", "1", ex=2 * DAY)
     log.info("Sent to %s: %r", recipient_id, text[:80])
-    return True
+    return mid
 
 
 async def send_as_owner(recipient_id: str, text: str) -> bool:

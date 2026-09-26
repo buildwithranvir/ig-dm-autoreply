@@ -5,10 +5,11 @@ alerts go out immediately; outside it they queue in Redis until the alert accoun
 message ("inbox"), which reopens the window and delivers the queue.
 """
 import logging
+import re
 import time
 
 from app import config
-from app.config import HOUR
+from app.config import DAY, HOUR
 from app.instagram import messaging
 from app.instagram.api import MAX_TEXT
 from app.storage.kv import kv
@@ -18,6 +19,18 @@ log = logging.getLogger(__name__)
 WINDOW_KEY = "owner:last_msg"
 QUEUE_KEY = "alerts:queue"
 WINDOW = 23 * HOUR  # stay safely inside the 24h limit
+QUESTION_TAG = re.compile(r"❓ #(\d+)")  # the "❓ #12" marker on question alerts
+
+
+async def _link_question(mid: str, text: str) -> None:
+    """Remember which question an alert message carries, so a swipe-reply to it counts as the answer."""
+    ids = set(QUESTION_TAG.findall(text))
+    if len(ids) == 1:
+        await kv.set(f"qalert:{mid}", ids.pop(), ex=2 * DAY)
+
+
+async def question_for_alert(mid: str | None) -> str | None:
+    return await kv.get(f"qalert:{mid}") if mid else None
 
 
 async def mark_owner_active() -> None:
@@ -32,8 +45,11 @@ async def _window_open() -> bool:
 async def notify(text: str) -> None:
     if not config.OWNER_ALERT_IGSID:
         return
-    if await _window_open() and await messaging.send(config.OWNER_ALERT_IGSID, text):
-        return
+    if await _window_open():
+        mid = await messaging.send(config.OWNER_ALERT_IGSID, text)
+        if mid:
+            await _link_question(mid, text)
+            return
     await kv.rpush(QUEUE_KEY, text)
     log.info("Alert queued until the alert account messages again: %s", text)
 
@@ -60,6 +76,8 @@ async def deliver_queue() -> None:
         return
     header = f"📬 {len(queued)} alert(s) while you were away:"
     for message in pack([header, *queued]):
-        if not await messaging.send(config.OWNER_ALERT_IGSID, message):
+        mid = await messaging.send(config.OWNER_ALERT_IGSID, message)
+        if not mid:
             await kv.rpush(QUEUE_KEY, *queued)  # nothing is lost; the next "inbox" retries
             return
+        await _link_question(mid, message)

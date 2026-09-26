@@ -119,6 +119,27 @@ def _is_json_failure(resp: httpx.Response) -> bool:
     return resp.status_code == 400 and "json_validate_failed" in resp.text
 
 
+REPLY_FIELD = re.compile(r'"reply"\s*:\s*"((?:[^"\\]|\\.)*)"?')
+
+
+def salvage_reply(raw: str) -> str:
+    """Recover the reply text from output that should have been JSON but wasn't quite.
+
+    Handles a bare sentence ("cool bro"), a sentence with JSON debris ('nice, so wassup?"}'),
+    and truncated JSON ('{"reply": "hey bro", "hand').
+    """
+    raw = raw.strip()
+    match = REPLY_FIELD.search(raw)
+    if match:
+        try:
+            return json.loads(f'"{match.group(1)}"').strip()
+        except ValueError:
+            return match.group(1).strip()
+    if raw.startswith("{"):
+        return ""  # JSON without a reply field: nothing safe to send
+    return raw.strip('}"\' ')
+
+
 def parse(content: str) -> Reply:
     data = json.loads(content)
     return Reply(
@@ -180,10 +201,10 @@ async def decide(history: list[dict], *, is_request: bool = False, learned: Sequ
     try:
         resp = await _complete(body)
         if _is_json_failure(resp):
-            # Two plain-text answers in a row: it's a normal reply without the wrapper, so use it.
-            text = resp.json()["error"].get("failed_generation", "").strip()
-            if text and not text.startswith("{"):
-                log.warning("Using plain-text LLM reply as-is")
+            # Two malformed answers in a row: keep the reply text if it can be recovered.
+            text = salvage_reply(resp.json()["error"].get("failed_generation", ""))
+            if text:
+                log.warning("Using reply recovered from malformed LLM output")
                 return Reply(text=text)
         if not resp.is_success:
             log.error("LLM error %s: %s", resp.status_code, resp.text[:500])

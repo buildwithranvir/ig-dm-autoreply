@@ -57,6 +57,71 @@ def test_answer_after_24h_window_is_refused(ig):
     assert "too late" in ig.to(OWNER)[-1]
 
 
+def owner_reply(text, reply_to_mid=None):
+    event = dm(OWNER, text)
+    if reply_to_mid:
+        event["message"]["reply_to"] = {"mid": reply_to_mid, "is_self_reply": False}
+    return event
+
+
+def alert_mid(ig, qid):
+    """Message ID the fake Instagram gave the alert for question #qid."""
+    index = next(i for i, (rid, text) in enumerate(ig.sent) if rid == OWNER and f"❓ #{qid} " in text)
+    return f"bot-mid-{index + 1}"
+
+
+def test_swipe_reply_to_alert_answers_that_question(ig):
+    ask_about_laptop(ig, "p1")
+    ig.profiles["p2"] = {"username": "p2", "is_user_follow_business": True}
+    run(bot.handle_event(dm("p2", "what laptop do you use?")))  # second open question: #2
+    run(bot.handle_event(owner_reply("thinkpad x1", reply_to_mid=alert_mid(ig, 1))))
+    assert ig.to("p1")[-1] == "it's thinkpad x1 bro"
+    assert len(ig.to("p2")) == 1  # only the holding reply
+
+
+def test_plain_answer_goes_to_the_only_open_question(ig):
+    """The reported bug: answering without the number replied to the alert account instead."""
+    ask_about_laptop(ig, "client")
+    run(bot.handle_event(owner_reply("an ai gmail summariser, link is in my bio")))
+    assert ig.to("client")[-1] == "it's an ai gmail summariser, link is in my bio bro"
+    assert "✅ #1 sent to @client" in ig.to(OWNER)[-1]
+    assert not any("ai reply to" in t for t in ig.to(OWNER))
+
+
+def test_plain_save_answer_is_remembered(ig):
+    ask_about_laptop(ig, "s1")
+    run(bot.handle_event(owner_reply("save macbook air m2")))
+    assert ig.to("s1")[-1] == "it's macbook air m2 bro"
+    assert run(questions.learned_facts()) == [{"q": "What laptop do you use?", "a": "macbook air m2"}]
+
+
+def test_plain_answer_with_several_open_questions_asks_which(ig):
+    ask_about_laptop(ig, "a1")
+    ig.profiles["a2"] = {"username": "a2", "is_user_follow_business": True}
+    run(bot.handle_event(dm("a2", "what laptop do you use?")))
+    run(bot.handle_event(owner_reply("macbook")))
+    assert "Which question is this for?" in ig.to(OWNER)[-1]
+    assert "#1 @a1" in ig.to(OWNER)[-1] and "#2 @a2" in ig.to(OWNER)[-1]
+    assert len(ig.to("a1")) == 1 and len(ig.to("a2")) == 1
+
+
+def test_swipe_reply_to_queued_alert(ig):
+    ig.profiles["q9"] = {"username": "q9", "is_user_follow_business": True}
+    run(bot.handle_event(dm("q9", "what laptop do you use?")))  # alert window closed: queued
+    assert not ig.to(OWNER)
+    run(bot.handle_event(dm(OWNER, "inbox")))
+    run(bot.handle_event(owner_reply("dell xps", reply_to_mid=alert_mid(ig, 1))))
+    assert ig.to("q9")[-1] == "it's dell xps bro"
+
+
+def test_answered_question_is_closed(ig):
+    ask_about_laptop(ig, "done1")
+    run(bot.handle_event(owner_reply("1 macbook")))
+    ig.profiles[OWNER] = {"username": "ranvir_1028", "is_user_follow_business": True}
+    run(bot.handle_event(owner_reply("thanks bot")))  # no open questions left: normal chat
+    assert ig.to(OWNER)[-1].endswith("ai reply to: thanks bot")
+
+
 def test_number_without_live_question_is_normal_chat(ig):
     ig.profiles[OWNER] = {"username": "ranvir_1028", "is_user_follow_business": True}
     run(bot.handle_event(dm(OWNER, "5 bros walked in")))

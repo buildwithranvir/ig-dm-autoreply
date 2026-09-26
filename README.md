@@ -18,13 +18,15 @@ Instagram Login. Runs on Vercel (free) with Upstash Redis and a Groq-hosted LLM.
 Alerts and questions go to your second account (`OWNER_ALERT_IGSID`). Instagram only allows the bot
 to message it within 24 hours of its last message, so alerts queue until you write to the bot.
 
-| Send          | Effect                                                    |
-|---------------|-----------------------------------------------------------|
-| `inbox`       | Delivers queued alerts                                    |
-| `12 answer`   | Answers question #12; the AI relays it in your voice      |
-| `12 save answer` | Same, and remembers the answer for future chats        |
-| `reset`       | Clears your own test chat with the bot                    |
-| anything else | Chats with the AI like a normal user (for testing)        |
+| Send                                  | Effect                                                     |
+|---------------------------------------|------------------------------------------------------------|
+| swipe-reply to a ❓ alert with the answer | Answers that question; the AI relays it in your voice  |
+| `12 answer`                           | Answers question #12                                       |
+| just the answer                       | Answers the only open question (asks which if several)     |
+| `save` before any answer              | Also remembers the answer for future chats                 |
+| `inbox`                               | Delivers queued alerts                                     |
+| `reset`                               | Clears your own test chat with the bot                     |
+| anything else, with no open questions | Chats with the AI like a normal user (for testing)         |
 
 ## Project layout
 

@@ -51,6 +51,23 @@ def test_json_failure_twice_uses_plain_text(llm):
     assert reply.text == "cool bro, enjoy" and not reply.handoff
 
 
+def test_json_debris_is_stripped(llm):
+    llm(json_failure('nice nice, so wassup?"}'), json_failure('nice nice, so wassup?"}'))
+    assert decide("im all good too").text == "nice nice, so wassup?"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("cool bro", "cool bro"),
+    ('nice nice, so wassup?"}', "nice nice, so wassup?"),
+    ('{"reply": "hey bro", "hand', "hey bro"),
+    ('{"reply": "he said \\"hi\\""}', 'he said "hi"'),
+    ('{"handoff": true}', ""),
+    ('  "ok bro"  ', "ok bro"),
+])
+def test_salvage_reply(raw, expected):
+    assert ai.salvage_reply(raw) == expected
+
+
 def test_rate_limit_then_success(llm):
     llm(httpx.Response(429, text="try again in 1s"), ok('{"reply": "hey"}'))
     assert decide().text == "hey"

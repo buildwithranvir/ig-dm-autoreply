@@ -51,7 +51,7 @@ async def handle_event(event: dict) -> None:
     log.info("DM from %s: %r", sender_id, text)
     await questions.record_message_from(sender_id)
 
-    if sender_id == config.OWNER_ALERT_IGSID and await _handle_owner_command(message.get("text") or ""):
+    if sender_id == config.OWNER_ALERT_IGSID and await _handle_owner_command(message):
         return
     if "delete my data" in text.lower():
         await _delete_data(sender_id)
@@ -85,10 +85,11 @@ async def _on_echo(recipient_id: str | None, mid: str | None, text: str) -> None
         log.info("You replied to %s yourself; bot paused there for 24h", recipient_id)
 
 
-async def _handle_owner_command(text: str) -> bool:
+async def _handle_owner_command(message: dict) -> bool:
     """Messages from the alert account: inbox, reset, or an answer to a question.
     Returns False for anything else, which is then treated as a normal chat (handy for testing)."""
     await alerts.mark_owner_active()
+    text = message.get("text") or ""
     command = text.strip().lower()
     owner = config.OWNER_ALERT_IGSID
     if command == "inbox":
@@ -99,7 +100,7 @@ async def _handle_owner_command(text: str) -> bool:
         await kv.delete(f"pause:{owner}", f"disclosed:{owner}", f"pending:{owner}")
         await messaging.send(owner, "🔄 Reset: this test chat starts fresh.")
         return True
-    return await questions.handle_answer(text)
+    return await questions.handle_answer(text, (message.get("reply_to") or {}).get("mid"))
 
 
 async def _delete_data(igsid: str) -> None:
