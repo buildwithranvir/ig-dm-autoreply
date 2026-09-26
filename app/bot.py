@@ -157,7 +157,7 @@ async def _converse(igsid: str, text: str) -> None:
     elif reply.ask_owner:
         if not await messaging.send_as_owner(igsid, reply.text or config.ASK_FALLBACK):
             return
-        await questions.ask(igsid, who, reply.ask_owner)
+        await questions.ask(igsid, who, reply.ask_owner, text)
     elif not reply.text or not await messaging.send_as_owner(igsid, reply.text):
         return
 

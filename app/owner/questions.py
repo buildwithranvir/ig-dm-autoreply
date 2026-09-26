@@ -1,6 +1,6 @@
 """Ask-then-relay: questions the AI can't answer go to you, and your answer goes back in your voice.
 
-1. The AI can't answer, so the alert account gets: ❓ #12 @user asked: "..."
+1. The AI can't answer, so the alert account gets: ❓ #12 @user asked: "<their exact message>"
 2. You reply "12 <answer>", or "12 save <answer>" to also teach the bot for next time.
 3. The AI words your answer as a reply and DMs the person.
 """
@@ -59,15 +59,18 @@ def is_duplicate(question: str, pending: list[str]) -> bool:
     return False
 
 
-async def ask(igsid: str, who: str, question: str) -> None:
+async def ask(igsid: str, who: str, question: str, message: str) -> None:
+    """question is the AI's short rewording, used to spot repeats and to save answers.
+    message is what the person actually wrote, and is what you see in the alert."""
     pending = await pending_for(igsid)
     if is_duplicate(question, pending):
         return
     qid = await kv.incr("q:counter")
-    await kv.set_json(f"q:{qid}", {"igsid": igsid, "who": who, "question": question}, ex=QUESTION_TTL)
+    await kv.set_json(f"q:{qid}", {"igsid": igsid, "who": who, "question": question, "message": message},
+                      ex=QUESTION_TTL)
     await _set_pending(igsid, [*pending, question])
     await alerts.notify(
-        f"❓ #{qid} {who} asked: \"{question}\"\n"
+        f"❓ #{qid} {who} asked: \"{message[:300]}\"\n"
         f"Reply \"{qid} your answer\" and I'll DM them. To also remember it: \"{qid} save your answer\""
     )
 
@@ -100,6 +103,7 @@ async def handle_answer(text: str) -> bool:
         return False
 
     igsid, who, question = q["igsid"], q["who"], q["question"]
+    message = q.get("message", question)
     last = await kv.get(f"lastmsg:{igsid}")
     if not last or time.time() - float(last) > PERSON_WINDOW:
         await kv.delete(f"q:{qid}")
@@ -107,7 +111,7 @@ async def handle_answer(text: str) -> bool:
         return True
 
     instruction = (
-        f"You just found out the answer to their question \"{question}\": \"{answer}\". "
+        f"You just found out the answer to their question \"{message}\": \"{answer}\". "
         "Write the message you send them now, giving this answer naturally in your voice. "
         "Don't mention checking with anyone. Set handoff=false, spam=false, ask_owner=\"\"."
     )

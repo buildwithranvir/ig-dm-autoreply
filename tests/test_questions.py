@@ -17,7 +17,7 @@ def ask_about_laptop(ig, igsid):
 def test_question_is_relayed_and_saved(ig):
     ask_about_laptop(ig, "curious")
     assert ig.to("curious") == ["[AI]\ngood q, lemme check"]
-    assert '❓ #1 @curious asked: "What laptop do you use?"' in ig.to(OWNER)[-1]
+    assert '❓ #1 @curious asked: "what laptop do you use?"' in ig.to(OWNER)[-1]
 
     run(bot.handle_event(dm("curious", "which laptop tho?")))
     assert ig.to("curious")[-1] == "still checking bro"
@@ -31,6 +31,15 @@ def test_question_is_relayed_and_saved(ig):
     ig.profiles["other"] = {"username": "other", "is_user_follow_business": True}
     run(bot.handle_event(dm("other", "laptop?")))
     assert ig.to("other")[-1].endswith("known laptop answer")
+
+
+def test_alert_quotes_exact_message_not_ai_rewording(ig):
+    ig.profiles["w1"] = {"username": "w1", "is_user_follow_business": True}
+    run(bot.handle_event(dm(OWNER, "inbox")))
+    run(bot.handle_event(dm("w1", "bro which laptop is that in ur setup??")))
+    alert = ig.to(OWNER)[-1]
+    assert '"bro which laptop is that in ur setup??"' in alert
+    assert "What laptop do you use?" not in alert
 
 
 def test_answer_without_save_is_not_remembered(ig):
