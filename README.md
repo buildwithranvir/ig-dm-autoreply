@@ -57,9 +57,8 @@ Without Upstash credentials, storage is in memory and resets on restart.
 
 ## Deploying
 
-```powershell
-vercel deploy --prod
-```
+The Vercel project is linked to this repo: every push to `main` deploys to production
+automatically. `vercel deploy --prod` still works for a manual deploy.
 
 Settings live in the Vercel project's environment variables; `vercel.json` schedules the daily
-token-refresh cron. After editing `knowledge/`, redeploy for the changes to take effect.
+token-refresh cron. Changes to `knowledge/` take effect once they are pushed.
