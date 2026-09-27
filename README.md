@@ -8,6 +8,7 @@ Instagram Login. Runs on Vercel (free) with Upstash Redis and a Groq-hosted LLM.
 - Replies to followers, and to message requests from accounts that look real (verified, or a
   profile picture and at least 10 followers). Replying moves a request to General.
 - Answers small talk on its own and steers idle chats toward why the person messaged.
+- Doesn't reply to shared reels or posts (it keeps them as context for the next message).
 - Only states facts from `knowledge/`. Anything else becomes a question for you (see below).
 - Hands the chat to you (and stays quiet for 24h) for brand deals, complaints, personal topics or
   requests to talk to you directly. Replying yourself in the Instagram app also pauses it for 24h.
@@ -19,8 +20,7 @@ Alerts and questions go to your personal account (`OWNER_ALERT_IGSID`). Instagra
 to message it within 24 hours of its last message, so alerts queue until you write to the bot.
 
 On this account the AI talks to you as its boss: short, respectful, no disclosure tag, and it never
-pauses or screens the chat. Share a reel with it and it reacts to the reel (using the caption when
-Instagram includes one).
+pauses or screens the chat.
 
 | Send                                  | Effect                                                     |
 |---------------------------------------|------------------------------------------------------------|
@@ -30,7 +30,7 @@ Instagram includes one).
 | `save` before any answer              | Also remembers the answer for future chats                 |
 | `inbox`                               | Delivers queued alerts                                     |
 | `reset` or `forget`                   | Fresh start: forgets your chat, open questions and queued alerts |
-| a reel, or anything else with no open questions | Chats with the assistant                         |
+| anything else with no open questions  | Chats with the assistant                                   |
 
 ## Project layout
 

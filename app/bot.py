@@ -21,6 +21,14 @@ ATTACHMENT_NAMES = {
     "image": "a photo", "video": "a video", "audio": "a voice note", "file": "a file",
 }
 RESET_WORDS = {"reset", "forget"}
+SHARED_CONTENT = {"ig_reel", "reel", "ig_post", "share"}
+
+
+def is_shared_reel(message: dict) -> bool:
+    """A message that is only a shared reel or post, with nothing typed."""
+    attachments = message.get("attachments") or []
+    return (not (message.get("text") or "").strip() and bool(attachments)
+            and all(a.get("type") in SHARED_CONTENT for a in attachments))
 
 
 def _describe_attachment(attachment: dict) -> str:
@@ -65,6 +73,13 @@ async def handle_event(event: dict) -> None:
     log.info("DM from %s: %r", sender_id, text)
     await questions.record_message_from(sender_id)
 
+    if is_shared_reel(message):
+        # Reels and posts get no reply; keep them in the history in case the next message refers to one.
+        if sender_id == config.OWNER_ALERT_IGSID:
+            await alerts.mark_owner_active()
+        await history.add(sender_id, "user", text)
+        log.info("Shared reel/post from %s; not replying", sender_id)
+        return
     if sender_id == config.OWNER_ALERT_IGSID:
         if not await _handle_owner_command(message) and config.BOT_ENABLED:
             await _chat_with_owner(text)

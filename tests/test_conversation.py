@@ -1,4 +1,6 @@
 from app import bot
+from app.owner import questions
+from app.storage import history
 from app.storage.kv import kv
 from tests.conftest import OWNER, dm, echo, run
 
@@ -78,16 +80,36 @@ def test_owner_is_never_paused_or_screened(ig):
     assert run(kv.get(f"pause:{OWNER}")) is None
 
 
-def test_owner_shared_reel_gets_a_reply_even_with_open_questions(ig):
+def shared_reel(sender, caption="5 AI tools for devs", text=None):
+    event = dm(sender, text or "")
+    if text is None:
+        event["message"].pop("text")
+    event["message"]["attachments"] = [{"type": "ig_reel", "payload": {"url": "u", "title": caption}}]
+    return event
+
+
+def test_shared_reels_get_no_reply_from_anyone(ig):
+    follower(ig, "fan")
+    run(bot.handle_event(shared_reel("fan")))
+    run(bot.handle_event(shared_reel(OWNER)))
+    assert ig.sent == []
+    assert run(history.get("fan"))[-1]["content"] == '[sent: a reel (caption: "5 AI tools for devs")]'
+
+
+def test_owner_reel_is_not_taken_as_an_answer(ig):
     follower(ig, "asker")
     run(bot.handle_event(dm(OWNER, "inbox")))
-    run(bot.handle_event(dm("asker", "what laptop do you use?")))  # one open question
-    reel = dm(OWNER, "")
-    reel["message"].pop("text")
-    reel["message"]["attachments"] = [{"type": "ig_reel", "payload": {"url": "u", "title": "5 AI tools for devs"}}]
-    run(bot.handle_event(reel))
-    assert ig.to(OWNER)[-1] == 'boss reply to: [sent: a reel (caption: "5 AI tools for devs")]'
-    assert len(ig.to("asker")) == 1  # the reel wasn't taken as an answer
+    run(bot.handle_event(dm("asker", "what laptop do you use?")))
+    sent_before = len(ig.sent)
+    run(bot.handle_event(shared_reel(OWNER)))
+    assert len(ig.sent) == sent_before
+    assert run(questions.pending_for("asker"))  # question #1 still open
+
+
+def test_reel_with_typed_text_still_gets_a_reply(ig):
+    follower(ig, "fan2")
+    run(bot.handle_event(shared_reel("fan2", text="how did u make this?")))
+    assert len(ig.to("fan2")) == 1
 
 
 def test_reset_forgets_chat_questions_and_queued_alerts(ig):

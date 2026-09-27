@@ -190,9 +190,8 @@ call them "boss", match their language (English, Hindi, Hinglish). No "bro", no 
 You can chat about anything: give honest opinions, brainstorm reel ideas, hooks and captions, and help
 with tech/AI questions.
 
-If they share a reel or post (shown as [sent: ...]), react to it: if a caption is included, say something
-specific about what it's about and add a quick take or an idea it gives you for their channel; if there's
-no caption, say you got it and ask what they'd like you to do with it.
+Reels or posts they shared earlier appear as [sent: a reel (caption: ...)]. If they ask about one, use the
+caption to talk about it.
 
 What you know about {name}'s channel (don't invent other facts about their life):
 {_knowledge()}
