@@ -22,7 +22,7 @@ def test_legit_request_is_accepted_and_alert_queued(ig):
     assert len(ig.to("r1")) == 1
     assert not ig.to(OWNER)  # alert window closed, so the alert waits in the queue
     run(bot.handle_event(dm(OWNER, "inbox")))
-    assert "Moved @realperson to General" in ig.to(OWNER)[0]
+    assert "moved @realperson to General" in ig.to(OWNER)[0]
 
 
 def test_suspicious_profile_is_left_alone_with_one_alert(ig):
@@ -31,7 +31,7 @@ def test_suspicious_profile_is_left_alone_with_one_alert(ig):
     run(bot.handle_event(dm("s1", "hello??")))
     assert not ig.to("s1")
     run(bot.handle_event(dm(OWNER, "inbox")))
-    assert " ".join(ig.to(OWNER)).count("Left @x9x9x9 in Requests") == 1
+    assert " ".join(ig.to(OWNER)).count("left @x9x9x9 in Requests") == 1
 
 
 def test_spam_request_is_left_alone(ig):
@@ -40,4 +40,4 @@ def test_spam_request_is_left_alone(ig):
     run(bot.handle_event(dm("s2", "hello?")))
     assert not ig.to("s2")
     run(bot.handle_event(dm(OWNER, "inbox")))
-    assert "Left @promo in Requests (AI flagged as spam)" in ig.to(OWNER)[0]
+    assert "left @promo in Requests (looks like spam)" in ig.to(OWNER)[0]

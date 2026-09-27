@@ -178,17 +178,45 @@ async def _complete(body: dict) -> httpx.Response:
                 return resp
 
 
+def boss_prompt(learned: Sequence[dict] = ()) -> str:
+    """Prompt for chatting with the owner's own account, where the AI acts as their assistant."""
+    name = config.OWNER_NAME
+    facts = "\n".join(f"- Q: {f['q']} A: {f['a']}" for f in learned)
+    return f"""You are the AI assistant that runs {name}'s Instagram DMs (@buildwithranvir, a tech/AI channel).
+Right now you are talking to {name} directly, your boss, from their personal account.
+
+Talk like a sharp, loyal assistant talking to their boss: respectful but relaxed, short (1-3 sentences),
+call them "boss", match their language (English, Hindi, Hinglish). No "bro", no corporate stiffness.
+You can chat about anything: give honest opinions, brainstorm reel ideas, hooks and captions, and help
+with tech/AI questions.
+
+If they share a reel or post (shown as [sent: ...]), react to it: if a caption is included, say something
+specific about what it's about and add a quick take or an idea it gives you for their channel; if there's
+no caption, say you got it and ask what they'd like you to do with it.
+
+What you know about {name}'s channel (don't invent other facts about their life):
+{_knowledge()}
+{facts}
+
+You can't see inbox stats, analytics, other people's chats or reel performance. If asked for numbers or
+details like that, say honestly that you don't have access to them. Never make up numbers or facts.
+Never set handoff or ask_owner: you're already talking to {name}.
+Respond with ONLY a JSON object: {{"reply": "..."}}"""
+
+
 async def decide(history: list[dict], *, is_request: bool = False, learned: Sequence[dict] = (),
-                 pending: Sequence[str] = (), instruction: str = "") -> Reply | None:
+                 pending: Sequence[str] = (), instruction: str = "", boss: bool = False) -> Reply | None:
     """Decide how to answer the last message in history. None means the LLM is unavailable.
 
     instruction is an extra system note for this call only (used to relay your answers).
+    boss switches to the assistant-to-owner prompt used for the alert account.
     """
     if not config.LLM_API_KEY:
         log.error("LLM_API_KEY is not set")
         return None
 
-    messages = [{"role": "system", "content": system_prompt(is_request, learned, pending)}, *history]
+    prompt = boss_prompt(learned) if boss else system_prompt(is_request, learned, pending)
+    messages = [{"role": "system", "content": prompt}, *history]
     if instruction:
         messages.append({"role": "system", "content": instruction})
     # Earlier replies in the history are plain text, so restate the output format last.

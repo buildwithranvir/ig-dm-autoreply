@@ -16,14 +16,28 @@ PAUSE_TTL = DAY
 REPLY_WINDOW_MS = 23 * HOUR * 1000  # only answer messages well inside the 24h window
 
 
+ATTACHMENT_NAMES = {
+    "ig_reel": "a reel", "reel": "a reel", "ig_post": "a post", "share": "a post", "story": "a story",
+    "image": "a photo", "video": "a video", "audio": "a voice note", "file": "a file",
+}
+RESET_WORDS = {"reset", "forget"}
+
+
+def _describe_attachment(attachment: dict) -> str:
+    kind = attachment.get("type", "attachment")
+    name = ATTACHMENT_NAMES.get(kind, kind)
+    caption = ((attachment.get("payload") or {}).get("title") or "").strip()
+    return f'{name} (caption: "{caption[:300]}")' if caption else name
+
+
 def describe(message: dict) -> str:
-    """The message text, plus a note about anything else they sent (photo, reel, story reply...)."""
+    """The message text, plus a note about anything else they sent (photo, reel and its caption...)."""
     text = (message.get("text") or "").strip()
-    kinds = [a.get("type", "attachment") for a in message.get("attachments") or []]
+    parts = [_describe_attachment(a) for a in message.get("attachments") or []]
     if (message.get("reply_to") or {}).get("story"):
-        kinds.append("reply to your story")
-    if kinds:
-        return f"{text} [sent: {', '.join(kinds)}]".strip()
+        parts.append("a reply to your story")
+    if parts:
+        return f"{text} [sent: {', '.join(parts)}]".strip()
     return text or "[sent something unsupported, e.g. a sticker]"
 
 
@@ -51,7 +65,9 @@ async def handle_event(event: dict) -> None:
     log.info("DM from %s: %r", sender_id, text)
     await questions.record_message_from(sender_id)
 
-    if sender_id == config.OWNER_ALERT_IGSID and await _handle_owner_command(message):
+    if sender_id == config.OWNER_ALERT_IGSID:
+        if not await _handle_owner_command(message) and config.BOT_ENABLED:
+            await _chat_with_owner(text)
         return
     if "delete my data" in text.lower():
         await _delete_data(sender_id)
@@ -87,20 +103,48 @@ async def _on_echo(recipient_id: str | None, mid: str | None, text: str) -> None
 
 async def _handle_owner_command(message: dict) -> bool:
     """Messages from the alert account: inbox, reset, or an answer to a question.
-    Returns False for anything else, which is then treated as a normal chat (handy for testing)."""
+    Returns False for anything else, which then becomes a chat with the assistant."""
     await alerts.mark_owner_active()
-    text = message.get("text") or ""
-    command = text.strip().lower()
-    owner = config.OWNER_ALERT_IGSID
+    text = (message.get("text") or "").strip()
+    command = text.lower()
     if command == "inbox":
         await alerts.deliver_queue()
         return True
-    if command == "reset":
-        await history.clear(owner)
-        await kv.delete(f"pause:{owner}", f"disclosed:{owner}", f"pending:{owner}")
-        await messaging.send(owner, "🔄 Reset: this test chat starts fresh.")
+    if command in RESET_WORDS:
+        await _fresh_start()
         return True
+    if not text or message.get("attachments"):
+        return False  # a shared reel or photo is something to talk about, not an answer
     return await questions.handle_answer(text, (message.get("reply_to") or {}).get("mid"))
+
+
+async def _fresh_start() -> None:
+    """Forget the chat with the owner and every open question and queued alert."""
+    owner = config.OWNER_ALERT_IGSID
+    await history.clear(owner)
+    await kv.delete(f"pause:{owner}", f"disclosed:{owner}", f"pending:{owner}")
+    dropped_questions = await questions.forget_all()
+    dropped_alerts = await alerts.clear_queue()
+    cleared = []
+    if dropped_questions:
+        cleared.append(f"{dropped_questions} open question(s)")
+    if dropped_alerts:
+        cleared.append(f"{dropped_alerts} queued alert(s)")
+    extra = f" and cleared {' and '.join(cleared)}" if cleared else ""
+    await messaging.send(owner, f"🔄 Fresh start, boss. I've forgotten our chat{extra}.")
+
+
+async def _chat_with_owner(text: str) -> None:
+    """The owner chatting with their assistant: boss mode, no screening, no disclosure tag."""
+    owner = config.OWNER_ALERT_IGSID
+    await history.add(owner, "user", text)
+    await api.sender_action(owner, "typing_on")
+    reply = await ai.decide(await history.get(owner), learned=await questions.learned_facts(), boss=True)
+    if reply is None or not reply.text:
+        await messaging.send(owner, "⚠️ The AI is down right now, boss. Try again in a minute.")
+        return
+    if await messaging.send(owner, reply.text):
+        await history.add(owner, "assistant", reply.text)
 
 
 async def _delete_data(igsid: str) -> None:
@@ -130,7 +174,7 @@ async def _converse(igsid: str, text: str) -> None:
     if decision == screening.SKIP:
         # Alert once per screening period; repeat messages from the same person stay quiet.
         if await kv.set(f"skipalert:{igsid}", "1", ex=screening.SKIPPED_TTL, nx=True):
-            await alerts.notify(f"⛔ Left {who} in Requests ({reason}): \"{snippet}\"")
+            await alerts.notify(f"⛔ Boss, I left {who} in Requests ({reason}): \"{snippet}\"")
         return
     if not await _within_rate_limits(igsid):
         log.warning("Rate limit reached; not replying to %s", igsid)
@@ -144,17 +188,17 @@ async def _converse(igsid: str, text: str) -> None:
                             pending=await questions.pending_for(igsid))
 
     if reply is None:
-        await alerts.notify(f"⚠️ AI unavailable, {who} is waiting for you: \"{snippet}\"")
+        await alerts.notify(f"⚠️ Boss, the AI is down and {who} is waiting for you: \"{snippet}\"")
         return
     if reply.spam and is_request:
         await screening.save(igsid, screening.SKIP, "AI flagged as spam", profile)
-        await alerts.notify(f"⛔ Left {who} in Requests (AI flagged as spam): \"{snippet}\"")
+        await alerts.notify(f"⛔ Boss, I left {who} in Requests (looks like spam): \"{snippet}\"")
         return
 
     if reply.handoff:
         await messaging.send_as_owner(igsid, reply.text or config.HANDOFF_FALLBACK)
         await kv.set(f"pause:{igsid}", "handoff", ex=PAUSE_TTL)
-        await alerts.notify(f"🙋 {who} needs you ({reply.reason or 'AI unsure'}): \"{snippet}\"")
+        await alerts.notify(f"🙋 Boss, {who} needs you ({reply.reason or 'not sure how to answer'}): \"{snippet}\"")
     elif reply.ask_owner:
         if not await messaging.send_as_owner(igsid, reply.text or config.ASK_FALLBACK):
             return
@@ -163,4 +207,4 @@ async def _converse(igsid: str, text: str) -> None:
         return
 
     if is_request and await kv.set(f"movedalert:{igsid}", "1", ex=screening.ACCEPTED_TTL, nx=True):
-        await alerts.notify(f"✅ Moved {who} to General ({reason}): \"{snippet}\"")
+        await alerts.notify(f"✅ Boss, I moved {who} to General ({reason}): \"{snippet}\"")

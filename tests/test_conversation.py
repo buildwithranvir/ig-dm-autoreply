@@ -30,7 +30,7 @@ def test_llm_down_alerts_instead_of_replying(ig):
     run(bot.handle_event(dm("f5", "is the server down")))
     assert not ig.to("f5")
     run(bot.handle_event(dm(OWNER, "inbox")))
-    assert "AI unavailable, @fan5 is waiting" in ig.to(OWNER)[0]
+    assert "the AI is down and @fan5 is waiting" in ig.to(OWNER)[0]
 
 
 def test_spam_flag_is_ignored_for_followers(ig):
@@ -66,23 +66,51 @@ def test_delete_my_data(ig):
     assert run(kv.get("hist:f4")) is None
 
 
-def test_owner_account_can_chat_with_ai(ig):
-    follower(ig, OWNER, "ranvir_1028")
+def test_owner_gets_boss_mode_without_disclosure(ig):
     run(bot.handle_event(dm(OWNER, "yo what's up")))
-    assert ig.to(OWNER) == ["[AI]\nai reply to: yo what's up"]
+    assert ig.to(OWNER) == ["boss reply to: yo what's up"]
 
 
-def test_owner_reset_clears_pause(ig):
-    follower(ig, OWNER, "ranvir_1028")
-    run(bot.handle_event(dm(OWNER, "wanna collab")))
-    assert run(kv.get(f"pause:{OWNER}"))
-    run(bot.handle_event(dm(OWNER, "reset")))
+def test_owner_is_never_paused_or_screened(ig):
+    run(bot.handle_event(dm(OWNER, "wanna collab")))  # a handoff topic for anyone else
+    run(bot.handle_event(dm(OWNER, "hello")))
+    assert ig.to(OWNER)[-1] == "boss reply to: hello"
     assert run(kv.get(f"pause:{OWNER}")) is None
-    run(bot.handle_event(dm(OWNER, "hey")))
-    assert ig.to(OWNER)[-1].endswith("ai reply to: hey")
+
+
+def test_owner_shared_reel_gets_a_reply_even_with_open_questions(ig):
+    follower(ig, "asker")
+    run(bot.handle_event(dm(OWNER, "inbox")))
+    run(bot.handle_event(dm("asker", "what laptop do you use?")))  # one open question
+    reel = dm(OWNER, "")
+    reel["message"].pop("text")
+    reel["message"]["attachments"] = [{"type": "ig_reel", "payload": {"url": "u", "title": "5 AI tools for devs"}}]
+    run(bot.handle_event(reel))
+    assert ig.to(OWNER)[-1] == 'boss reply to: [sent: a reel (caption: "5 AI tools for devs")]'
+    assert len(ig.to("asker")) == 1  # the reel wasn't taken as an answer
+
+
+def test_reset_forgets_chat_questions_and_queued_alerts(ig):
+    follower(ig, "asker")
+    run(bot.handle_event(dm("asker", "what laptop do you use?")))  # window closed: alert queued
+    run(bot.handle_event(dm(OWNER, "reset")))
+    assert "Fresh start, boss" in ig.to(OWNER)[-1]
+    assert "1 open question(s)" in ig.to(OWNER)[-1] and "1 queued alert(s)" in ig.to(OWNER)[-1]
+    assert run(kv.get("hist:" + OWNER)) is None
+    assert run(kv.get_json("pending:asker")) is None
+    run(bot.handle_event(dm(OWNER, "1 macbook")))  # question #1 is gone, so this is just chat
+    assert ig.to(OWNER)[-1] == "boss reply to: 1 macbook"
+    assert len(ig.to("asker")) == 1
+
+
+def test_forget_also_works_as_reset(ig):
+    run(bot.handle_event(dm(OWNER, "Forget")))
+    assert "Fresh start, boss" in ig.to(OWNER)[-1]
 
 
 def test_story_reply_and_media_are_described():
-    assert bot.describe({"attachments": [{"type": "ig_reel"}]}) == "[sent: ig_reel]"
-    assert bot.describe({"text": "nice", "reply_to": {"story": {"id": "1"}}}) == "nice [sent: reply to your story]"
+    assert bot.describe({"attachments": [{"type": "ig_reel"}]}) == "[sent: a reel]"
+    reel = {"attachments": [{"type": "ig_reel", "payload": {"title": "my agent setup"}}]}
+    assert bot.describe(reel) == '[sent: a reel (caption: "my agent setup")]'
+    assert bot.describe({"text": "nice", "reply_to": {"story": {"id": "1"}}}) == "nice [sent: a reply to your story]"
     assert bot.describe({"text": "hey", "reply_to": None}) == "hey"

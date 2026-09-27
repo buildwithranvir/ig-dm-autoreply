@@ -54,6 +54,11 @@ async def notify(text: str) -> None:
     log.info("Alert queued until the alert account messages again: %s", text)
 
 
+async def clear_queue() -> int:
+    """Drop every queued alert. Returns how many were dropped."""
+    return len(await kv.pop_all(QUEUE_KEY))
+
+
 def pack(items: list[str]) -> list[str]:
     """Combine alerts into as few messages as possible, each within the length limit."""
     out, current = [], ""
@@ -72,9 +77,9 @@ async def deliver_queue() -> None:
     await mark_owner_active()
     queued = await kv.pop_all(QUEUE_KEY)
     if not queued:
-        await messaging.send(config.OWNER_ALERT_IGSID, "📭 No queued alerts. You'll get live alerts for the next 24h.")
+        await messaging.send(config.OWNER_ALERT_IGSID, "📭 All clear, boss. Nothing queued, and you'll get alerts live for the next 24h.")
         return
-    header = f"📬 {len(queued)} alert(s) while you were away:"
+    header = f"📬 Boss, {len(queued)} alert(s) came in while you were away:"
     for message in pack([header, *queued]):
         mid = await messaging.send(config.OWNER_ALERT_IGSID, message)
         if not mid:

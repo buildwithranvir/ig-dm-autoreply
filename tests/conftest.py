@@ -21,9 +21,11 @@ class FakeSendResponse:
         return {"message_id": self._mid}
 
 
-async def fake_decide(history, *, is_request=False, learned=(), pending=(), instruction=""):
+async def fake_decide(history, *, is_request=False, learned=(), pending=(), instruction="", boss=False):
     """Keyword-driven LLM stand-in: collab -> handoff, crypto -> spam, laptop -> ask you, down -> unavailable."""
     last = history[-1]["content"]
+    if boss:
+        return ai.Reply(text=f"boss reply to: {last}")
     if instruction:
         answer = instruction.split('": "')[1].split('"')[0]
         return ai.Reply(text=f"it's {answer} bro")

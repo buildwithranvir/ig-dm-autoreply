@@ -81,8 +81,8 @@ async def ask(igsid: str, who: str, question: str, message: str) -> None:
     await kv.set_json(OPEN_KEY, [*await _open_ids(), qid], ex=QUESTION_TTL)
     await _set_pending(igsid, [*pending, question])
     await alerts.notify(
-        f"❓ #{qid} {who} asked: \"{message[:300]}\"\n"
-        f"Swipe-reply to this with your answer and I'll DM them. Start it with \"save\" to also remember it."
+        f"❓ #{qid} Boss, {who} asked: \"{message[:300]}\"\n"
+        f"Swipe-reply with the answer and I'll send it to them. Start with \"save\" and I'll remember it too."
     )
 
 
@@ -103,6 +103,15 @@ async def _open_questions() -> dict[str, dict]:
 async def _close(qid: str) -> None:
     await kv.delete(f"q:{qid}")
     await kv.set_json(OPEN_KEY, [i for i in await _open_ids() if i != qid], ex=QUESTION_TTL)
+
+
+async def forget_all() -> int:
+    """Close every open question and clear it from the askers' pending lists. Returns how many."""
+    open_questions = await _open_questions()
+    for qid, q in open_questions.items():
+        await kv.delete(f"q:{qid}", f"pending:{q['igsid']}")
+    await kv.delete(OPEN_KEY)
+    return len(open_questions)
 
 
 def split_save(text: str) -> tuple[bool, str]:
@@ -162,7 +171,7 @@ async def handle_answer(text: str, reply_to_mid: str | None = None) -> bool:
     if match == "ambiguous":
         waiting = "\n".join(f"#{qid} {q['who']}: \"{q.get('message', q['question'])[:80]}\""
                             for qid, q in (await _open_questions()).items())
-        await _tell_owner("Which question is this for? Swipe-reply to its ❓ alert, or start your message "
+        await _tell_owner("Which question is this for, boss? Swipe-reply to its ❓ alert, or start your message "
                           f"with its number (e.g. \"12 your answer\"):\n{waiting}")
         return True
 
@@ -173,7 +182,7 @@ async def handle_answer(text: str, reply_to_mid: str | None = None) -> bool:
     last = await kv.get(f"lastmsg:{igsid}")
     if not last or time.time() - float(last) > PERSON_WINDOW:
         await _close(qid)
-        await _tell_owner(f"⌛ #{qid}: too late, {who}'s 24h window has closed. Reply to them in the app.")
+        await _tell_owner(f"⌛ #{qid}: too late, boss. {who}'s 24h window has closed, so please reply in the app.")
         return True
 
     instruction = (
@@ -183,10 +192,10 @@ async def handle_answer(text: str, reply_to_mid: str | None = None) -> bool:
     )
     reply = await ai.decide(await history.get(igsid), learned=await learned_facts(), instruction=instruction)
     if reply is None or not reply.text:
-        await _tell_owner(f"⚠️ #{qid}: AI unavailable, nothing was sent to {who}. Try again in a minute.")
+        await _tell_owner(f"⚠️ #{qid}: the AI is down, boss, so nothing went to {who}. Try again in a minute.")
         return True
     if not await messaging.send_as_owner(igsid, reply.text):
-        await _tell_owner(f"⚠️ #{qid}: Instagram refused the message to {who}. Reply to them in the app.")
+        await _tell_owner(f"⚠️ #{qid}: Instagram refused the message to {who}, boss. Please reply in the app.")
         return True
 
     await _close(qid)
@@ -195,6 +204,6 @@ async def handle_answer(text: str, reply_to_mid: str | None = None) -> bool:
     if save:
         facts = [f for f in await learned_facts() if f["q"] != question]
         await kv.set_json(LEARNED_KEY, [*facts, {"q": question, "a": answer}][-MAX_LEARNED:])
-        note = "\n💾 Saved. I'll answer this myself next time."
-    await _tell_owner(f"✅ #{qid} sent to {who}: \"{reply.text}\"{note}")
+        note = "\n💾 Saved, I'll answer this one myself next time."
+    await _tell_owner(f"✅ Done boss, #{qid} sent to {who}: \"{reply.text}\"{note}")
     return True

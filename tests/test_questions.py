@@ -17,7 +17,7 @@ def ask_about_laptop(ig, igsid):
 def test_question_is_relayed_and_saved(ig):
     ask_about_laptop(ig, "curious")
     assert ig.to("curious") == ["[AI]\ngood q, lemme check"]
-    assert '❓ #1 @curious asked: "what laptop do you use?"' in ig.to(OWNER)[-1]
+    assert '❓ #1 Boss, @curious asked: "what laptop do you use?"' in ig.to(OWNER)[-1]
 
     run(bot.handle_event(dm("curious", "which laptop tho?")))
     assert ig.to("curious")[-1] == "still checking bro"
@@ -25,7 +25,7 @@ def test_question_is_relayed_and_saved(ig):
 
     run(bot.handle_event(dm(OWNER, "1 save macbook air m2")))
     assert ig.to("curious")[-1] == "it's macbook air m2 bro"
-    assert "✅ #1 sent to @curious" in ig.to(OWNER)[-1] and "Saved" in ig.to(OWNER)[-1]
+    assert "#1 sent to @curious" in ig.to(OWNER)[-1] and "Saved" in ig.to(OWNER)[-1]
     assert run(questions.pending_for("curious")) == []
 
     ig.profiles["other"] = {"username": "other", "is_user_follow_business": True}
@@ -84,8 +84,8 @@ def test_plain_answer_goes_to_the_only_open_question(ig):
     ask_about_laptop(ig, "client")
     run(bot.handle_event(owner_reply("an ai gmail summariser, link is in my bio")))
     assert ig.to("client")[-1] == "it's an ai gmail summariser, link is in my bio bro"
-    assert "✅ #1 sent to @client" in ig.to(OWNER)[-1]
-    assert not any("ai reply to" in t for t in ig.to(OWNER))
+    assert "#1 sent to @client" in ig.to(OWNER)[-1]
+    assert not any("reply to:" in t for t in ig.to(OWNER))
 
 
 def test_plain_save_answer_is_remembered(ig):
@@ -100,7 +100,7 @@ def test_plain_answer_with_several_open_questions_asks_which(ig):
     ig.profiles["a2"] = {"username": "a2", "is_user_follow_business": True}
     run(bot.handle_event(dm("a2", "what laptop do you use?")))
     run(bot.handle_event(owner_reply("macbook")))
-    assert "Which question is this for?" in ig.to(OWNER)[-1]
+    assert "Which question is this for" in ig.to(OWNER)[-1]
     assert "#1 @a1" in ig.to(OWNER)[-1] and "#2 @a2" in ig.to(OWNER)[-1]
     assert len(ig.to("a1")) == 1 and len(ig.to("a2")) == 1
 
@@ -119,7 +119,7 @@ def test_answered_question_is_closed(ig):
     run(bot.handle_event(owner_reply("1 macbook")))
     ig.profiles[OWNER] = {"username": "ranvir_1028", "is_user_follow_business": True}
     run(bot.handle_event(owner_reply("thanks bot")))  # no open questions left: normal chat
-    assert ig.to(OWNER)[-1].endswith("ai reply to: thanks bot")
+    assert ig.to(OWNER)[-1] == "boss reply to: thanks bot"
 
 
 def test_new_question_is_asked_while_another_is_open(ig):
@@ -133,7 +133,7 @@ def test_new_question_is_asked_while_another_is_open(ig):
 def test_number_without_live_question_is_normal_chat(ig):
     ig.profiles[OWNER] = {"username": "ranvir_1028", "is_user_follow_business": True}
     run(bot.handle_event(dm(OWNER, "5 bros walked in")))
-    assert ig.to(OWNER)[-1].endswith("ai reply to: 5 bros walked in")
+    assert ig.to(OWNER)[-1] == "boss reply to: 5 bros walked in"
 
 
 @pytest.mark.parametrize("text,expected", [
