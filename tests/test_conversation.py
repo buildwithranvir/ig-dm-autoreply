@@ -60,6 +60,14 @@ def test_manual_reply_pauses_chat_but_bot_echo_does_not(ig):
     assert len(ig.to("f3")) == 1
 
 
+def test_family_center_invite_does_not_pause_chat(ig):
+    follower(ig, "f7")
+    run(bot.handle_event(echo("f7", "system-1", "Invite to set up supervision: https://familycenter.instagram.com/fc/invite/abc")))
+    assert run(kv.get("pause:f7")) is None
+    run(bot.handle_event(dm("f7", "hey")))
+    assert len(ig.to("f7")) == 1
+
+
 def test_delete_my_data(ig):
     follower(ig, "f4")
     run(bot.handle_event(dm("f4", "hey")))

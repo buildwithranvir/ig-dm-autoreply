@@ -101,9 +101,17 @@ async def _is_new(mid: str | None) -> bool:
     return False
 
 
+def is_instagram_system_message(text: str) -> bool:
+    """Messages Instagram sends from your account on its own, e.g. Family Center supervision invites."""
+    return "familycenter.instagram.com" in text.lower()
+
+
 async def _on_echo(recipient_id: str | None, mid: str | None, text: str) -> None:
     """A message sent from your account. If the bot didn't send it, you replied yourself."""
     if not recipient_id or not mid or await messaging.was_sent_by_bot(mid):
+        return
+    if is_instagram_system_message(text):
+        log.info("Ignoring Instagram system message sent to %s", recipient_id)
         return
     # The echo can arrive before the bot has recorded its own message ID, so check once more.
     await asyncio.sleep(1.5)
