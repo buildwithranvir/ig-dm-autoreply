@@ -105,4 +105,8 @@ tests/           pytest, no network needed
 - People can type "delete my data" in a DM and their chat history gets wiped.
 - Vercel's free plan is meant for non commercial use, so check their terms if your page makes money.
 
+## License
+
+MIT, so feel free to use it, change it and build on it. See [LICENSE](LICENSE).
+
 Made by [@buildwithranvir](https://instagram.com/buildwithranvir).
