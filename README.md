@@ -5,13 +5,14 @@ Instagram Login. Runs on Vercel (free) with Upstash Redis and a Groq-hosted LLM.
 
 ## What it does
 
-- Replies to followers, and to message requests from accounts that look real (verified, or a
-  profile picture and at least 10 followers). Replying moves a request to General.
+- Replies to everyone who messages, whatever their follower count. Replying moves a message request
+  to General. Only obvious spam from non-followers is left alone.
 - Answers small talk on its own and steers idle chats toward why the person messaged.
 - Doesn't reply to shared reels or posts (it keeps them as context for the next message).
 - Only states facts from `knowledge/`. Anything else becomes a question for you (see below).
 - Hands the chat to you (and stays quiet for 24h) for brand deals, complaints, personal topics or
-  requests to talk to you directly. Replying yourself in the Instagram app also pauses it for 24h.
+  requests to talk to you directly. If you reply to someone yourself, it stays quiet in that chat for
+  10 minutes (`MANUAL_REPLY_PAUSE_MINUTES`) so it doesn't talk over you.
 - The first reply in each conversation is marked as AI-written.
 
 ## Your alert account

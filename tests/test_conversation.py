@@ -1,3 +1,5 @@
+import time
+
 from app import bot
 from app.owner import questions
 from app.storage import history
@@ -58,6 +60,13 @@ def test_manual_reply_pauses_chat_but_bot_echo_does_not(ig):
     assert run(kv.get("pause:f3"))
     run(bot.handle_event(dm("f3", "ok thanks")))
     assert len(ig.to("f3")) == 1
+
+
+def test_manual_reply_pause_is_short(ig):
+    follower(ig, "f8")
+    run(bot.handle_event(echo("f8", "typed-by-hand", "hey, accepted your request")))
+    expires = kv.backend._data["pause:f8"][1]
+    assert 0 < expires - time.time() <= 10 * 60
 
 
 def test_family_center_invite_does_not_pause_chat(ig):

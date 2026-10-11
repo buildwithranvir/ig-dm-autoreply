@@ -12,7 +12,7 @@ from app.storage.kv import kv
 
 log = logging.getLogger(__name__)
 
-PAUSE_TTL = DAY
+HANDOFF_PAUSE = DAY
 REPLY_WINDOW_MS = 23 * HOUR * 1000  # only answer messages well inside the 24h window
 
 
@@ -120,8 +120,10 @@ async def _on_echo(recipient_id: str | None, mid: str | None, text: str) -> None
     if text:
         await history.add(recipient_id, "assistant", text)
     if recipient_id != config.OWNER_ALERT_IGSID:
-        await kv.set(f"pause:{recipient_id}", "manual reply", ex=PAUSE_TTL)
-        log.info("You replied to %s yourself; bot paused there for 24h", recipient_id)
+        minutes = config.MANUAL_REPLY_PAUSE_MINUTES
+        if minutes > 0:
+            await kv.set(f"pause:{recipient_id}", "manual reply", ex=minutes * 60)
+            log.info("You replied to %s yourself; bot quiet there for %d min", recipient_id, minutes)
 
 
 async def _handle_owner_command(message: dict) -> bool:
@@ -220,7 +222,7 @@ async def _converse(igsid: str, text: str) -> None:
 
     if reply.handoff:
         await messaging.send_as_owner(igsid, reply.text or config.HANDOFF_FALLBACK)
-        await kv.set(f"pause:{igsid}", "handoff", ex=PAUSE_TTL)
+        await kv.set(f"pause:{igsid}", "handoff", ex=HANDOFF_PAUSE)
         await alerts.notify(f"🙋 Boss, {who} needs you ({reply.reason or 'not sure how to answer'}): \"{snippet}\"")
     elif reply.ask_owner:
         if not await messaging.send_as_owner(igsid, reply.text or config.ASK_FALLBACK):

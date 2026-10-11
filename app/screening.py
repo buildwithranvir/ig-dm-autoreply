@@ -1,33 +1,24 @@
-"""Which conversations the bot engages with.
+"""Who a conversation is with: a follower or someone new (a message request).
 
-Replying to a message request moves it from Requests to General, so replying means accepting.
-Followers are always answered; non-followers must look like a real account.
+Everyone gets a reply. Knowing whether the sender follows you only changes two things: the AI
+also checks non-followers' messages for obvious spam, and you get a "moved to General" alert the
+first time the bot answers someone new (replying to a message request moves it to General).
 """
-from app import config
 from app.config import DAY
 from app.instagram import api
 from app.storage.kv import kv
 
 ACCEPTED_TTL = 90 * DAY
-SKIPPED_TTL = 7 * DAY  # re-screen after a week; their profile may have changed
+SKIPPED_TTL = 7 * DAY  # how long a sender flagged as spam is left alone
 
 FOLLOWER, ACCEPT, SKIP = "follower", "accept", "skip"
 
 
-def evaluate(profile: dict | None, min_followers: int) -> tuple[str, str]:
-    """Return (decision, reason) for a sender's profile."""
-    if not profile:
-        return SKIP, "profile unavailable"
-    if profile.get("is_user_follow_business"):
+def evaluate(profile: dict | None) -> tuple[str, str]:
+    """Return (decision, reason) for a sender's profile. Only spam (set later by the AI) is skipped."""
+    if profile and profile.get("is_user_follow_business"):
         return FOLLOWER, "follows you"
-    if profile.get("is_verified_user"):
-        return ACCEPT, "verified account"
-    if not profile.get("profile_pic"):
-        return SKIP, "no profile picture"
-    followers = int(profile.get("follower_count") or 0)
-    if followers < min_followers:
-        return SKIP, f"only {followers} followers"
-    return ACCEPT, f"{followers} followers"
+    return ACCEPT, "new conversation"
 
 
 async def screen(igsid: str) -> tuple[str, str, dict | None]:
@@ -37,7 +28,7 @@ async def screen(igsid: str) -> tuple[str, str, dict | None]:
         return saved["decision"], saved["reason"], saved.get("profile")
 
     profile = await api.get_profile(igsid)
-    decision, reason = evaluate(profile, config.REQUEST_MIN_FOLLOWERS)
+    decision, reason = evaluate(profile)
     summary = {k: profile.get(k) for k in ("username", "name", "follower_count")} if profile else None
     await save(igsid, decision, reason, summary)
     return decision, reason, summary

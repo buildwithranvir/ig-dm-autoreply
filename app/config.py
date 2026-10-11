@@ -41,7 +41,8 @@ CRON_SECRET = _get("CRON_SECRET")
 BOT_ENABLED = _get("BOT_ENABLED", "true").lower() not in ("0", "false", "no", "off")
 OWNER_NAME = _get("OWNER_NAME", "Ranvir")
 OWNER_ALERT_IGSID = _get("OWNER_ALERT_IGSID")  # your 2nd account: receives alerts and questions
-REQUEST_MIN_FOLLOWERS = _int("REQUEST_MIN_FOLLOWERS", 10)
+# After you reply to someone yourself, the bot stays quiet in that chat for this long
+MANUAL_REPLY_PAUSE_MINUTES = _int("MANUAL_REPLY_PAUSE_MINUTES", 10)
 MAX_AUTO_DMS_PER_HOUR = _int("MAX_AUTO_DMS_PER_HOUR", 100)
 MAX_REPLIES_PER_THREAD_PER_DAY = _int("MAX_REPLIES_PER_THREAD_PER_DAY", 30)
 DISCLOSURE_PREFIX = _get("DISCLOSURE_PREFIX", f"🤖 (AI replying for {OWNER_NAME})")
