@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 WINDOW_KEY = "owner:last_msg"
 QUEUE_KEY = "alerts:queue"
 WINDOW = 23 * HOUR  # stay safely inside the 24h limit
+NUDGE_AFTER = 20 * HOUR  # remind the owner this long after their last message
 QUESTION_TAG = re.compile(r"❓ #(\d+)")  # the "❓ #12" marker on question alerts
 
 
@@ -40,6 +41,21 @@ async def mark_owner_active() -> None:
 async def _window_open() -> bool:
     last = await kv.get(WINDOW_KEY)
     return bool(last) and time.time() - float(last) < WINDOW
+
+
+async def nudge_if_window_closing() -> None:
+    """Ask the owner to say something before the 24h window closes, so alerts can keep coming.
+
+    Runs on every webhook delivery and on the daily cron. Sends at most one reminder per window.
+    """
+    last = await kv.get(WINDOW_KEY)
+    if not config.OWNER_ALERT_IGSID or not last:
+        return
+    age = time.time() - float(last)
+    if NUDGE_AFTER <= age < WINDOW and await kv.set(f"owner:nudged:{last}", "1", ex=DAY, nx=True):
+        await messaging.send(config.OWNER_ALERT_IGSID,
+                             "⏰ Boss, quick heads up: Instagram only lets me message you for 24 hours after "
+                             "your last message. Send me anything to keep alerts and questions coming.")
 
 
 async def notify(text: str) -> None:
@@ -72,17 +88,22 @@ def pack(items: list[str]) -> list[str]:
     return out + ([current] if current else [])
 
 
-async def deliver_queue() -> None:
-    """The alert account messaged: reopen the window and send everything queued."""
+async def deliver_queue(announce_empty: bool = True) -> int:
+    """The alert account messaged: reopen the window and send everything queued.
+    announce_empty sends an "all clear" when nothing was waiting (used for the "inbox" command).
+    Returns how many alerts were delivered."""
     await mark_owner_active()
     queued = await kv.pop_all(QUEUE_KEY)
     if not queued:
-        await messaging.send(config.OWNER_ALERT_IGSID, "📭 All clear, boss. Nothing queued, and you'll get alerts live for the next 24h.")
-        return
+        if announce_empty:
+            await messaging.send(config.OWNER_ALERT_IGSID,
+                                 "📭 All clear, boss. Nothing queued, and you'll get alerts live for the next 24h.")
+        return 0
     header = f"📬 Boss, {len(queued)} alert(s) came in while you were away:"
     for message in pack([header, *queued]):
         mid = await messaging.send(config.OWNER_ALERT_IGSID, message)
         if not mid:
             await kv.rpush(QUEUE_KEY, *queued)  # nothing is lost; the next "inbox" retries
-            return
+            return 0
         await _link_question(mid, message)
+    return len(queued)

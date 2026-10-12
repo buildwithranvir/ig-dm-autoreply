@@ -27,6 +27,10 @@ MAX_LEARNED = 50
 ANSWER_RE = re.compile(r"^#?(\d+)\s+(.+)$", re.DOTALL)
 # Words that say nothing about *what* is being asked. Creator-account words ("last reel", "video")
 # are included because most questions mention them; two questions sharing only those aren't the same.
+SMALL_TALK = set(
+    "hey hi hii hello yo sup wassup ok okay k kk thanks thank you ty thx lol haha hmm gm gn bro boss "
+    "nice cool good great yes no yeah yep nope".split()
+)
 FILLER_WORDS = set(
     "i you u my your ur me do did does the a an is are was were what which how where when who why "
     "use used using have has got get can could for in on of to it its this that bro find from with "
@@ -138,12 +142,20 @@ async def _tell_owner(text: str) -> None:
     await messaging.send(config.OWNER_ALERT_IGSID, text)
 
 
-async def _match_question(text: str, reply_to_mid: str | None) -> tuple[str, bool, str] | str | None:
+def is_small_talk(text: str) -> bool:
+    """Greetings and filler like "hey" or "ok thanks" are chat, never an answer to a question."""
+    words = re.findall(r"[a-z]+", text.lower())
+    return bool(words) and len(words) <= 3 and all(w in SMALL_TALK for w in words)
+
+
+async def _match_question(text: str, reply_to_mid: str | None,
+                          allow_plain: bool = True) -> tuple[str, bool, str] | str | None:
     """Work out which question the alert account is answering.
 
     Tries, in order: a swipe-reply to a question alert, a leading question number ("12 answer"),
-    and finally the only open question. Returns (qid, save, answer), "ambiguous" when several
-    questions are open and the message doesn't say which, or None when it isn't an answer.
+    and finally the only open question. That last guess is skipped for small talk and when
+    allow_plain is False. Returns (qid, save, answer), "ambiguous" when several questions are
+    open and the message doesn't say which, or None when it isn't an answer.
     """
     qid = await alerts.question_for_alert(reply_to_mid)
     if qid and await kv.get(f"q:{qid}"):
@@ -154,6 +166,8 @@ async def _match_question(text: str, reply_to_mid: str | None) -> tuple[str, boo
     if parsed and await kv.get(f"q:{parsed[0]}"):
         return parsed
 
+    if not allow_plain or is_small_talk(text):
+        return None
     open_questions = await _open_questions()
     if len(open_questions) == 1:
         save, answer = split_save(text)
@@ -163,9 +177,10 @@ async def _match_question(text: str, reply_to_mid: str | None) -> tuple[str, boo
     return None
 
 
-async def handle_answer(text: str, reply_to_mid: str | None = None) -> bool:
-    """Relay the answer if the message answers an open question. Returns False if it's just chat."""
-    match = await _match_question(text, reply_to_mid)
+async def handle_answer(text: str, reply_to_mid: str | None = None, allow_plain: bool = True) -> bool:
+    """Relay the answer if the message answers an open question. Returns False if it's just chat.
+    allow_plain=False means only a swipe-reply or a question number counts as an answer."""
+    match = await _match_question(text, reply_to_mid, allow_plain)
     if match is None:
         return False
     if match == "ambiguous":

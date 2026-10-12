@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from app import bot, config
 from app.instagram import api, tokens
+from app.owner import alerts
 from app.storage.kv import kv
 
 # Windows consoles default to cp1252, and DMs are full of emoji.
@@ -81,7 +82,9 @@ async def receive_webhook(request: Request):
 async def cron_refresh_token(authorization: str = Header(""), force: bool = False):
     if not config.CRON_SECRET or authorization != f"Bearer {config.CRON_SECRET}":
         raise HTTPException(status_code=401, detail="unauthorized")
-    return await tokens.refresh(force=force)
+    result = await tokens.refresh(force=force)
+    await alerts.nudge_if_window_closing()
+    return result
 
 
 PRIVACY_HTML = """<!doctype html>

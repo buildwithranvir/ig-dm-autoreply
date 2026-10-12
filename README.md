@@ -45,13 +45,13 @@ Alerts and questions go to my personal Instagram account. There it talks to me l
 |---|---|
 | swipe reply to a ❓ alert | that answer goes to the person who asked |
 | `12 macbook air` | answers question #12 |
-| just the answer | answers the only open question (it asks which one if there are a few) |
+| just the answer | answers the only open question (it asks which one if there are a few, and a plain "hey" or "ok" never counts) |
 | `save` before any answer | it remembers the answer for next time |
-| `inbox` | sends me any alerts that were waiting |
+| `inbox` | sends me any alerts that were waiting, or says all clear |
 | `reset` or `forget` | fresh start, it forgets our chat and every open question |
 | anything else | normal chat, good for brainstorming reel ideas |
 
-Instagram only lets a business account message someone who messaged it in the last 24 hours. That counts for my personal account too, so if I haven't texted the bot in a day, alerts wait in a queue until I send `inbox`.
+Instagram only lets a business account message someone who messaged it in the last 24 hours. That counts for my personal account too, so if I haven't texted the bot in a day, alerts wait in a queue. The moment I send it anything, everything that was waiting comes through. It also pings me about 20 hours in, while it still can, so I can keep the window open.
 
 ## Running your own copy
 

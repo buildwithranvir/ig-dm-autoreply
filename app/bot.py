@@ -73,15 +73,22 @@ async def handle_event(event: dict) -> None:
     log.info("DM from %s: %r", sender_id, text)
     await questions.record_message_from(sender_id)
 
+    is_owner = sender_id == config.OWNER_ALERT_IGSID
+    just_delivered = 0
+    if is_owner and (message.get("text") or "").strip().lower() not in RESET_WORDS | {"inbox"}:
+        # Any message from you reopens the 24h window, so deliver whatever was waiting.
+        just_delivered = await alerts.deliver_queue(announce_empty=False)
+    elif not is_owner:
+        await alerts.nudge_if_window_closing()
+
     if is_shared_reel(message):
         # Reels and posts get no reply; keep them in the history in case the next message refers to one.
-        if sender_id == config.OWNER_ALERT_IGSID:
-            await alerts.mark_owner_active()
         await history.add(sender_id, "user", text)
         log.info("Shared reel/post from %s; not replying", sender_id)
         return
-    if sender_id == config.OWNER_ALERT_IGSID:
-        if not await _handle_owner_command(message) and config.BOT_ENABLED:
+    if is_owner:
+        # You haven't seen alerts delivered just now, so this message can't be a plain answer to them.
+        if not await _handle_owner_command(message, allow_plain_answer=not just_delivered) and config.BOT_ENABLED:
             await _chat_with_owner(text)
         return
     if "delete my data" in text.lower():
@@ -126,7 +133,7 @@ async def _on_echo(recipient_id: str | None, mid: str | None, text: str) -> None
             log.info("You replied to %s yourself; bot quiet there for %d min", recipient_id, minutes)
 
 
-async def _handle_owner_command(message: dict) -> bool:
+async def _handle_owner_command(message: dict, allow_plain_answer: bool = True) -> bool:
     """Messages from the alert account: inbox, reset, or an answer to a question.
     Returns False for anything else, which then becomes a chat with the assistant."""
     await alerts.mark_owner_active()
@@ -140,7 +147,7 @@ async def _handle_owner_command(message: dict) -> bool:
         return True
     if not text or message.get("attachments"):
         return False  # a shared reel or photo is something to talk about, not an answer
-    return await questions.handle_answer(text, (message.get("reply_to") or {}).get("mid"))
+    return await questions.handle_answer(text, (message.get("reply_to") or {}).get("mid"), allow_plain_answer)
 
 
 async def _fresh_start() -> None:

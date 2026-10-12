@@ -162,3 +162,27 @@ def test_parse_answer(text, expected):
 ])
 def test_duplicate_question_detection(question, pending, expected):
     assert questions.is_duplicate(question, pending) is expected
+
+
+def test_greeting_is_never_taken_as_an_answer(ig):
+    ask_about_laptop(ig, "g1")
+    for greeting in ["hey", "ok thanks", "lol"]:
+        run(bot.handle_event(owner_reply(greeting)))
+    assert ig.to("g1") == ["[AI]\ngood q, lemme check"]
+
+
+def test_wake_up_message_is_not_an_answer_but_the_next_one_is(ig):
+    ig.profiles["w2"] = {"username": "w2", "is_user_follow_business": True}
+    run(bot.handle_event(dm("w2", "what laptop do you use?")))  # window closed: question queued
+    run(bot.handle_event(owner_reply("macbook air m2")))  # delivers the queue; not an answer yet
+    assert len(ig.to("w2")) == 1
+    run(bot.handle_event(owner_reply("macbook air m2")))  # now it is
+    assert ig.to("w2")[-1] == "it's macbook air m2 bro"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("hey", True), ("ok thanks", True), ("Hii!!", True), ("lol", True),
+    ("macbook", False), ("it's a dell xps", False), ("yes it's in my bio", False),
+])
+def test_small_talk_detection(text, expected):
+    assert questions.is_small_talk(text) is expected
